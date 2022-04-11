@@ -1,8 +1,20 @@
+#include<string.h>
+#include<errno.h>
+
 #include"main.h"
+
+#define DEBUG_
+#ifdef DEBUG_
+#define DEBUG(format, ...) printf("%s:%d:errno=%d\t"format, __func__, __LINE__, errno, ##__VA_ARGS__)
+#endif
 
 #define CLIENT_IP "192.168.66.128"
 #define CLIENT_PORT 9999
+#if 1
 #define SERVER_IP "192.168.66.128"
+#else
+#define SERVER_IP "127.0.0.1"
+#endif
 #define SERVER_PORT 9000
 
 static int socket_init(){
@@ -22,6 +34,13 @@ static int socket_init(){
         sleep(1);
         printf("err bind,try again\n");
     }
+    char client_ip[INET_ADDRSTRLEN] = "";
+    //打印客户端地址
+    if(NULL == inet_ntop(AF_INET, &addr.sin_addr, client_ip, INET_ADDRSTRLEN)){
+        DEBUG("inet_ntop err\n");
+    }
+    DEBUG("client ip = %s port = %d\n", client_ip, addr.sin_port);
+
     struct sockaddr_in saddr = {0};
     saddr.sin_family = AF_INET;
     saddr.sin_port = htons(SERVER_PORT);
@@ -29,22 +48,26 @@ static int socket_init(){
         printf("err inet_pton\n");
         return -1;
     }
-    if(-1 == connect(fd,(struct sockaddr *)&saddr,sizeof(saddr))){
+    if(NULL == inet_ntop(AF_INET, &saddr.sin_addr, client_ip, INET_ADDRSTRLEN)){
+        DEBUG("inet_ntop err\n");
+    }
+    DEBUG("server ip = %s port = %d\n", client_ip, saddr.sin_port);
+
+    while(-1 == connect(fd,(struct sockaddr *)&saddr,sizeof(saddr))){
         printf("err connect\n");
-        return -1;
+        sleep(2);
     }
     char msg[] = "hello world\n";
-    send(fd,msg,sizeof(char),0);
-    // if(-1 == listen(fd,10)){
-    //     return -1;
-    // }
-    // struct sockaddr_in caddr = {0};
-    // int cfd = accept(fd,(struct sockaddr *)&caddr,sizeof(caddr));
-    // if(-1 == cfd){
-    //     return -1;
-    // }
-    // char client_ip[INET_ADDRSTRLEN] = "";
-    // printf("ok accept,client ip = %d", inet_ntop(AF_INET,caddr.sin_addr.s_addr,client_ip,INET_ADDRSTRLEN));
+    send(fd,msg,sizeof(msg),0);
+    while(1){
+        memset(msg, 0, sizeof(msg));
+        int len = recv(fd, msg, sizeof(msg), 0);
+        printf("len = %d\n", len);
+        if(0 >= len){
+            break;
+        }
+        printf("recv %s", msg);
+    }
 }
 int main(){
     if(-1 == socket_init()){

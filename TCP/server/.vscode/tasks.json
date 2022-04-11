@@ -9,7 +9,7 @@
                 "-g",
                 "${workspaceFolder}/*.c",
                 "-o",
-                "${workspaceFolder}/main",
+                "${workspaceFolder}/bin/main",
                 "-pthread"
             ],
             "options": {
