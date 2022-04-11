@@ -8,10 +8,10 @@
 #define DEBUG(format, ...) printf("%s:%d:errno=%d\t"format, __func__, __LINE__, errno, ##__VA_ARGS__)
 #endif
 
-#define CLIENT_IP "192.168.66.128"
+#define CLIENT_IP "192.168.0.103"
 #define CLIENT_PORT 9999
 #if 1
-#define SERVER_IP "192.168.66.128"
+#define SERVER_IP "192.168.0.103"
 #else
 #define SERVER_IP "127.0.0.1"
 #endif
