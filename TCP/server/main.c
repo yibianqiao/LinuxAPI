@@ -223,7 +223,7 @@ static void *client_handle_thread(void *arg){
     thread_info_t *thread_info = (thread_info_t *)arg;
     struct stat file_info = {0};
     int fp = 0;
-    char msg[4096] = {0};
+    char msg[] = "hello world!";
     // FILE *fp = fopen("./main.html","r");
     // if(NULL == fp){
     //     DEBUG("open file err\n");
@@ -242,34 +242,40 @@ static void *client_handle_thread(void *arg){
     int recv_len = 0;
     off_t start = 0;
     ssize_t send_size = 0;
-    char *msg[] = {"hello world!", "this is C!"};
+    // char *msg[] = {"hello world!", "this is C!"};
     char i = 0;
     while(1){
-        memset(msg, 0, sizeof(msg));
-        recv_len = recv(thread_info->fd, msg, sizeof(msg), 0);
-        //-1:接收错误 0:连接断开
-        if(-1 == recv_len){
-            DEBUG("thread:%lx recv err\n", thread_info->id);
+        if(-1 == send(thread_info->fd, msg[0], strlen(msg[i]), 0)){
             break;
-        }else if(0 == recv_len){
-            DEBUG("thread:%lx cant connect\n", thread_info->id);
-            break;
-        }else{
-            DEBUG("thread:%lx recv:\n%s\n", thread_info->id, msg);
-            // 发送http头部
-            sprintf(msg, "HTTP/1.1 200 OK\nconnection: close\nContent-length: %ld\nContent-type: text/html\n\n", file_info.st_size);
-            if(-1 == send(thread_info->fd, msg, strlen(msg), 0)){
-                DEBUG("send err\n");
-                continue;
-            }
-            // 发送html，使用内核态数据拷贝，不需要切换至用户态和内存
-            start = SEEK_SET;
-            send_size = sendfile(thread_info->fd, fp, &start, (size_t)file_info.st_size);
-            if(send_size != file_info.st_size){
-                DEBUG("sendfile byte err\n");
-            }
         }
+        sleep(3);
     }
+    // while(1){
+    //     memset(msg, 0, sizeof(msg));
+    //     recv_len = recv(thread_info->fd, msg, sizeof(msg), 0);
+    //     //-1:接收错误 0:连接断开
+    //     if(-1 == recv_len){
+    //         DEBUG("thread:%lx recv err\n", thread_info->id);
+    //         break;
+    //     }else if(0 == recv_len){
+    //         DEBUG("thread:%lx cant connect\n", thread_info->id);
+    //         break;
+    //     }else{
+    //         DEBUG("thread:%lx recv:\n%s\n", thread_info->id, msg);
+    //         // 发送http头部
+    //         sprintf(msg, "HTTP/1.1 200 OK\nconnection: close\nContent-length: %ld\nContent-type: text/html\n\n", file_info.st_size);
+    //         if(-1 == send(thread_info->fd, msg, strlen(msg), 0)){
+    //             DEBUG("send err\n");
+    //             continue;
+    //         }
+    //         // 发送html，使用内核态数据拷贝，不需要切换至用户态和内存
+    //         start = SEEK_SET;
+    //         send_size = sendfile(thread_info->fd, fp, &start, (size_t)file_info.st_size);
+    //         if(send_size != file_info.st_size){
+    //             DEBUG("sendfile byte err\n");
+    //         }
+    //     }
+    // }
     
     DEBUG("thread:%lx will exit\n", thread_info->id);
     pthread_cleanup_pop(1);
