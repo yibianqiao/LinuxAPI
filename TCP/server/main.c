@@ -22,11 +22,24 @@
 
 #include"list.h"
 
+#define IPV4
+
+#ifndef IPV6
 
 #if 1
-#define SERVER_ADDR "192.168.0.103"
+#define SERVER_ADDR "10.0.4.8"
 #else
 #define SERVER_ADDR "127.0.0.1"
+#endif
+
+#else
+
+#if 0
+#define SERVER_ADDR "fe80::b226:346a:4cf7:517f"
+#else
+#define SERVER_ADDR "::1"
+#endif
+
 #endif
 
 #define SERVER_PORT 9000
@@ -117,8 +130,9 @@ static int get_resource(){
  * @brief 初始化socket
  * @return -1-ERR sfd-已经初始化的原套接字
  */
+#ifndef IPV6
 static int socket_init(){
-    int sfd = socket(AF_INET,SOCK_STREAM,0);
+    int sfd = socket(AF_INET, SOCK_STREAM, 0);
     if(-1 == sfd){
         DEBUG("err socket\n");
         return -1;
@@ -153,6 +167,48 @@ static int socket_init(){
 
     return sfd;
 }
+#else
+static int socket_init(){
+    // int sfd = socket(AF_INET,SOCK_STREAM,0);
+    int sfd = socket(AF_INET6, SOCK_STREAM, 0);
+    if(-1 == sfd){
+        DEBUG("err socket\n");
+        return -1;
+    }
+    int optval = 1;
+    if(-1 == setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval))){
+        DEBUG("setsockopt err\n");
+    }
+    struct sockaddr_in6 saddr = { 0 };
+    saddr.sin6_family = AF_INET6;
+    saddr.sin6_port = htons(SERVER_PORT);
+    //saddr.sin_addr.s_addr = in_addr
+    if(-1 == inet_pton(AF_INET6, SERVER_ADDR, &saddr.sin6_addr)){
+        DEBUG("err inet_pton\n");
+        return -1;
+    }
+    for(int i = 0; -1 == bind(sfd, (struct sockaddr *)&saddr, sizeof(saddr)); i++){
+        sleep(1);
+        DEBUG("err bind,try again\n");
+        if(i >= 20){
+            return -1;
+        }
+    }
+    if(-1 == listen(sfd,10)){
+        DEBUG("err listen\n");
+        return -1;
+    }
+    DEBUG("socket init is ok\n");
+    char client_ip[INET6_ADDRSTRLEN] = "";
+    //打印客户端地址
+    if(NULL == inet_ntop(AF_INET6, &saddr.sin6_addr, client_ip, INET6_ADDRSTRLEN)){
+        DEBUG("inet_ntop err\n");
+    }
+    DEBUG("main ip = %s port = %d\n", client_ip, saddr.sin6_port);
+
+    return sfd;
+}
+#endif
 /**
  * @brief 使用已初始化的套结字接收连接，每一个连接使用一个线程来处理
  * 
@@ -242,8 +298,6 @@ static void *client_handle_thread(void *arg){
     int recv_len = 0;
     off_t start = 0;
     ssize_t send_size = 0;
-    char *msg[] = {"hello world!", "this is C!"};
-    char i = 0;
     while(1){
         memset(msg, 0, sizeof(msg));
         recv_len = recv(thread_info->fd, msg, sizeof(msg), 0);
