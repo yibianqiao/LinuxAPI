@@ -1,8 +1,4 @@
-/**
- * @author liteng
- * @date 2022/3/7
- * @brief web服务器
- */
+
 #include<stdio.h>
 #include<stdlib.h>
 #include<unistd.h>
@@ -22,6 +18,7 @@
 
 #include"list.h"
 
+#define FILE_PATH "./001.bmp"
 
 #if 1
 #define SERVER_ADDR "192.168.0.103"
@@ -45,13 +42,43 @@ typedef struct thread_info_t{
     time_t time_create;//连接、线程创建时间
 }thread_info_t;
 
+
+#pragma pack(push, 1)
+/**
+ * @brief bmp文件头信息数据结构
+ */
+typedef struct bmp_info_t{
+    uint16_t bfType;
+    uint32_t bfSize;
+    uint16_t bfReserved1;
+    uint16_t bfReserved2;
+    uint32_t bfOffBits;
+    //
+    uint32_t biSize;
+    uint32_t biWidth;
+    uint32_t biHeight;
+    uint16_t biPlanes;
+    uint16_t biBitCount;
+    uint32_t biCompression;
+    uint32_t biSizeImages;
+    uint32_t biXPelsPerMeter;
+    int32_t biYPelsPerMeter;
+    int32_t biClrUsed;
+    uint32_t biClrImportant;
+}bmp_info_t;
+#pragma pack(pop)
+
 static int get_resource();
 static int socket_init();
 static int socket_handle(int, list_t *);
 static void *client_handle_thread(void *);
 static void thread_clean_func(void *);
 // static int thread_list_delete_func(void *,void *);
-
+/**
+ * @author liteng
+ * @date 2022/3/7
+ * @brief ESP8266TCP服务器，给ESP8266发送图片
+ */
 int main(int argc, void *argv[]){
     if(-1 == get_resource()){
         return -1;
@@ -219,69 +246,148 @@ static int socket_handle(int sfd, list_t *thread_list){
  * @brief 客户端处理线程，每个连接一个线程来处理
  * 线程退出前删除自己的链表节点，为防止线程异常结束未删除，使用线程退出处理函数
  */
+#if 0
 static void *client_handle_thread(void *arg){
+    #define BUF_NUM 14400
     thread_info_t *thread_info = (thread_info_t *)arg;
-    struct stat file_info = {0};
-    int fp = 0;
-    char msg[] = "hello world!";
-    // FILE *fp = fopen("./main.html","r");
-    // if(NULL == fp){
-    //     DEBUG("open file err\n");
-    // }
+    // struct stat file_info = {0};
+    //发送缓冲区
+    uint16_t buf[BUF_NUM] = { 0 };
+    //从图片中读取数据缓冲区
+    uint32_t buffer[BUF_NUM] = { 0 };
+    bmp_info_t bmp_info = { 0 };
+
     DEBUG("thread:%lx start\n", thread_info->id);
     //注册线程；退出处理函数
     pthread_cleanup_push(thread_clean_func, arg);
-    //获取文件信息
-    if(-1 == stat("./main.html", &file_info)){
-        DEBUG("stat file err\n");
-    }
-    if(-1 == (fp = open("main.html", O_RDONLY))){
-        DEBUG("open file err\n");
+
+    int path_arg = 0;
+    FILE *fp = NULL;
+    while(1){
+        if(0 == path_arg){
+            fp = fopen(FILE_PATH,"r");
+            path_arg = 1;
+        }else{
+            fp = fopen("./002.bmp","r");
+            path_arg = 0;
+        }
+        // fp = fopen("./002.bmp","r");
+
+        if(NULL == fp){
+            DEBUG("open file err\n");
+        }
+        //读取bmp文件头信息，偏移至数据位置
+        fread(&bmp_info, sizeof(bmp_info_t), 1, fp);
+        fseek(fp, bmp_info.bfOffBits, SEEK_SET);
+        //写入ILI9341
+        int len = 0;
+        while(1){
+            memset(buffer, 0, sizeof(buffer));
+            memset(buf, 0, sizeof(buf));
+            //根据实际图片像素保存格式读取，这里是一个像素点使用32位表示，这样直接读取大于1字节会涉及到大小端的问题，即读取的数据怎么放入这32位中
+            //这里RGB32格式空白的字节保存在最高位，并且全为1,即FF
+            len = fread(buffer, sizeof(uint32_t), BUF_NUM, fp);
+            if(0 >= len){
+                DEBUG("read over len = %d\n", len);
+                break;
+            }
+            // printf("len = %d\n", len);
+            uint16_t middle = 0;
+            for(int i = 0; i < len; i++){
+                buf[i] = 0;
+                buf[i] |= (buffer[i] & 0x000000f8) >> 3;
+                buf[i] |= (buffer[i] & 0x0000fc00) >> 5;
+                buf[i] |= (buffer[i] & 0x00f80000) >> 8;
+                middle = buf[i] & 0x00ff;
+                buf[i] = buf[i] >> 8;
+                buf[i] = (middle << 8) | buf[i];
+            }
+            for(int i = 0; i < len; ){
+                i += send(thread_info->fd, buf, sizeof(uint16_t) * (len - i), 0);
+            }
+            // if(-1 == send(thread_info->fd, buf, sizeof(uint16_t) * len, MSG_WAITALL)){
+            //     break;
+            // }
+            // sleep(1);
+        }
+        fclose(fp);
+        // sleep(1);
     }
 
-    int recv_len = 0;
-    off_t start = 0;
-    ssize_t send_size = 0;
-    // char *msg[] = {"hello world!", "this is C!"};
-    char i = 0;
-    while(1){
-        if(-1 == send(thread_info->fd, msg[0], strlen(msg[i]), 0)){
-            break;
-        }
-        sleep(3);
-    }
-    // while(1){
-    //     memset(msg, 0, sizeof(msg));
-    //     recv_len = recv(thread_info->fd, msg, sizeof(msg), 0);
-    //     //-1:接收错误 0:连接断开
-    //     if(-1 == recv_len){
-    //         DEBUG("thread:%lx recv err\n", thread_info->id);
-    //         break;
-    //     }else if(0 == recv_len){
-    //         DEBUG("thread:%lx cant connect\n", thread_info->id);
-    //         break;
-    //     }else{
-    //         DEBUG("thread:%lx recv:\n%s\n", thread_info->id, msg);
-    //         // 发送http头部
-    //         sprintf(msg, "HTTP/1.1 200 OK\nconnection: close\nContent-length: %ld\nContent-type: text/html\n\n", file_info.st_size);
-    //         if(-1 == send(thread_info->fd, msg, strlen(msg), 0)){
-    //             DEBUG("send err\n");
-    //             continue;
-    //         }
-    //         // 发送html，使用内核态数据拷贝，不需要切换至用户态和内存
-    //         start = SEEK_SET;
-    //         send_size = sendfile(thread_info->fd, fp, &start, (size_t)file_info.st_size);
-    //         if(send_size != file_info.st_size){
-    //             DEBUG("sendfile byte err\n");
-    //         }
-    //     }
-    // }
+
     
     DEBUG("thread:%lx will exit\n", thread_info->id);
     pthread_cleanup_pop(1);
     pthread_exit(NULL);
 }
+#else
+static void *client_handle_thread(void *arg){
+    #define BUF_NUM 9600
+    thread_info_t *thread_info = (thread_info_t *)arg;
+    // struct stat file_info = {0};
+    //发送缓冲区
+    uint8_t buf[BUF_NUM] = { 0 };
+    //从图片中读取数据缓冲区
+    uint8_t buffer[2 * BUF_NUM] = { 0 };
+    bmp_info_t bmp_info = { 0 };
 
+    DEBUG("thread:%lx start\n", thread_info->id);
+    //注册线程；退出处理函数
+    pthread_cleanup_push(thread_clean_func, arg);
+
+    int path_arg = 0;
+    FILE *fp = NULL;
+    while(1){
+        if(0 == path_arg){
+            fp = fopen(FILE_PATH,"r");
+            path_arg = 1;
+        }else{
+            fp = fopen("./002.bmp","r");
+            path_arg = 0;
+        }
+        
+        if(NULL == fp){
+            DEBUG("open file err\n");
+        }
+        //读取bmp文件头信息，偏移至数据位置
+        fread(&bmp_info, sizeof(bmp_info_t), 1, fp);
+        fseek(fp, bmp_info.bfOffBits, SEEK_SET);
+        //写入ILI9341
+        int len = 0;
+        while(1){
+            memset(buffer, 0, sizeof(buffer));
+            memset(buf, 0, sizeof(buf));
+            //根据实际图片像素保存格式读取，这里是一个像素点使用32位表示，这样直接读取大于1字节会涉及到大小端的问题，即读取的数据怎么放入这32位中
+            //按照字节读取，第4个字节是FF，读取顺序是BGR
+            len = fread(buffer, sizeof(uint8_t), sizeof(buffer), fp);
+            if(0 >= len){
+                DEBUG("read over len = %d\n", len);
+                break;
+            }
+            //将RGB32格式换为RGB565，数组按照RGB的顺序放，发送过去是正确的
+            for(int i = 0; i < BUF_NUM/2; i++){
+                buf[i * 2] |= (buffer[i * 4 + 2] & 0xf8);
+                buf[i * 2] |= (buffer[i * 4 + 1] & 0xe0) >> 5;
+                buf[i * 2 + 1] |= (buffer[i * 4 + 1] & 0x1c) << 3;
+                buf[i * 2 + 1] |= (buffer[i * 4] & 0xf8) >> 3;
+            }
+            // printf("len = %d\n", len);
+            if(-1 == send(thread_info->fd, buf, sizeof(buf), MSG_WAITALL)){
+                break;
+            }
+            // sleep(1);
+        }
+        fclose(fp);
+        // sleep(1);
+    }
+
+
+    
+    DEBUG("thread:%lx will exit\n", thread_info->id);
+    pthread_cleanup_pop(1);
+    pthread_exit(NULL);
+}
+#endif
 /**
  * @brief 线程退出清理函数
  */
