@@ -3,10 +3,11 @@
  * @brief 这样做的目的是释放节点更快，无需在链表中查询节点，代价就是第一个成员必须是void *
  */
 #include<stdlib.h>
+#include<string.h>
 
 #define DEBUG_
 #ifdef DEBUG_
-#define DEBUG(format, ...) printf("%s:%d:errno=%d\t"format, __func__, __LINE__, errno, ##__VA_ARGS__)
+#define DEBUG(format, ...) printf("%s:%d:%s\t"format, __func__, __LINE__, strerror(errno), ##__VA_ARGS__)
 #endif
 
 typedef struct _list_t list_t;

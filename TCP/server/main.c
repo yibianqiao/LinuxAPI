@@ -27,7 +27,7 @@
 #ifndef IPV6
 
 #if 1
-#define SERVER_ADDR "10.0.4.8"
+#define SERVER_ADDR "1.117.64.20"
 #else
 #define SERVER_ADDR "127.0.0.1"
 #endif
@@ -149,9 +149,12 @@ static int socket_init(){
         DEBUG("err inet_pton\n");
         return -1;
     }
-    for(int i = 0; -1 == bind(sfd, (struct sockaddr *)&saddr, sizeof(saddr)) && 20 > i; i++){
+    for(int i = 0; -1 == bind(sfd, (struct sockaddr *)&saddr, sizeof(saddr)); i++){
         sleep(1);
         DEBUG("err bind,try again\n");
+        if(20 <= i){
+            return -1;
+        }
     }
     if(-1 == listen(sfd,10)){
         DEBUG("err listen\n");
